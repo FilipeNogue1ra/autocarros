@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -26,6 +27,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -48,14 +52,19 @@ import java.io.IOException
 import kotlin.Result
 import kotlin.collections.ArrayList
 import androidx.compose.ui.unit.LayoutDirection
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextAlign
+import java.net.URLEncoder
 
 // Constants
 private const val GOOGLE_API_KEY = "AIzaSyDdDNIdV5OVmv6zcEIhEHmmiS-BEzajNcU"
 private val AVEIRO_LOCATION_CENTER = LatLng(40.64427, -8.64554)
-// Reduzido para 10km para focar mais em Aveiro
 private const val AUTOCOMPLETE_RADIUS_METERS = 10000
 
 private enum class FocusedFieldAuto { NONE, ORIGIN, DESTINATION }
+private enum class TravelStepType { WALKING, BUS, TRANSFER }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +85,11 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
     val focusManager = LocalFocusManager.current
 
     val context = LocalContext.current
+
+    // Estado para controlar quais partes da rota devem ser destacadas
+    var highlightBusStops by remember { mutableStateOf(true) }
+    var highlightWalkingPath by remember { mutableStateOf(true) }
+    var highlightBusPath by remember { mutableStateOf(true) }
 
     // Usar uma variável para controlar manualmente a visibilidade do BottomSheet
     var shouldShowBottomSheet by remember { mutableStateOf(false) }
@@ -109,15 +123,12 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                             CameraUpdateFactory.newLatLngZoom(
                                 currentLatLng,
                                 15f
-                            )
+                            ),
+                            1000
                         )
                     }
                 } catch (e: SecurityException) {
-                    Log.e(
-                        "Location",
-                        "Permissão de localização não concedida (SecurityException).",
-                        e
-                    )
+                    Log.e("Location", "Permissão de localização não concedida (SecurityException).", e)
                 } catch (e: Exception) {
                     Log.e("Location", "Erro ao obter localização.", e)
                 }
@@ -150,7 +161,8 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                             CameraUpdateFactory.newLatLngZoom(
                                 currentLatLng,
                                 15f
-                            )
+                            ),
+                            1000
                         )
                     } ?: Log.d("Location", "Última localização conhecida é nula.")
                 } catch (e: SecurityException) {
@@ -169,6 +181,28 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
         }
     }
 
+    // Função para destacar a rota selecionada no mapa
+    fun centerRouteOnMap(route: Route) {
+        route.overviewPolyline?.points?.let { encodedPolyline ->
+            val decodedPath = decodePolyline(encodedPolyline)
+            if (decodedPath.isNotEmpty()) {
+                val bounds = LatLngBounds.builder()
+                decodedPath.forEach { bounds.include(it) }
+
+                coroutineScope.launch {
+                    try {
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngBounds(bounds.build(), 100),
+                            1000
+                        )
+                    } catch (e: Exception) {
+                        Log.e("RouteSearch", "Erro ao animar câmera: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
     // Substituir o LaunchedEffect pelo controle manual do estado do BottomSheet
     LaunchedEffect(routesList, selectedRoute, directionsErrorMessage, isLoadingDirections) {
         shouldShowBottomSheet = routesList.isNotEmpty() || selectedRoute != null ||
@@ -180,7 +214,6 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 sheetState.bottomSheetState.expand()
             }
         }
-        // Não tentamos chamar hide() aqui - isso é o que estava causando o erro
     }
 
     LaunchedEffect(Unit) {
@@ -214,8 +247,8 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 }
             }
         } else if (focusedFieldAuto != FocusedFieldAuto.ORIGIN || originText.length <= 2) {
-            if (focusedFieldAuto == FocusedFieldAuto.ORIGIN && originText.length <= 2) originSuggestions =
-                emptyList()
+            if (focusedFieldAuto == FocusedFieldAuto.ORIGIN && originText.length <= 2)
+                originSuggestions = emptyList()
         }
     }
 
@@ -236,8 +269,8 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 }
             }
         } else if (focusedFieldAuto != FocusedFieldAuto.DESTINATION || destinationText.length <= 2) {
-            if (focusedFieldAuto == FocusedFieldAuto.DESTINATION && destinationText.length <= 2) destinationSuggestions =
-                emptyList()
+            if (focusedFieldAuto == FocusedFieldAuto.DESTINATION && destinationText.length <= 2)
+                destinationSuggestions = emptyList()
         }
     }
 
@@ -264,114 +297,198 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                     // Sheet Content
                     if (selectedRoute == null && routesList.isNotEmpty() && !isLoadingDirections) {
                         Text(
-                            "Rotas encontradas:",
+                            "Rotas de Autocarro Disponíveis:",
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         LazyColumn(modifier = Modifier.fillMaxHeight(0.6f)) {
                             items(
                                 items = routesList,
                                 key = { route -> route.hashCode() }) { route ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clickable {
-                                            selectedRoute = route
-                                            coroutineScope.launch {
-                                                sheetState.bottomSheetState.expand()
-                                            }
-                                        },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(
-                                            "Sumário: ${route.summary ?: "Rota"}",
-                                            style = MaterialTheme.typography.titleLarge
-                                        )
-                                        val firstLeg = route.legs?.firstOrNull()
-                                        Text(
-                                            "Duração: ${firstLeg?.duration?.text ?: "N/A"}",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        Text(
-                                            "Distância: ${firstLeg?.distance?.text ?: "N/A"}",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
+                                BusRouteCard(
+                                    route = route,
+                                    onClick = {
+                                        selectedRoute = route
+                                        centerRouteOnMap(route)
+                                        coroutineScope.launch {
+                                            sheetState.bottomSheetState.expand()
+                                        }
                                     }
-                                }
+                                )
                             }
                             item { Spacer(modifier = Modifier.height(paddingValues.calculateBottomPadding() + 16.dp)) }
                         }
                     } else if (selectedRoute != null) {
                         val currentRoute = selectedRoute!!
+
+                        // Cabeçalho com botão para voltar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    selectedRoute = null
+                                    coroutineScope.launch {
+                                        if (routesList.isNotEmpty()) {
+                                            sheetState.bottomSheetState.partialExpand()
+                                        } else {
+                                            shouldShowBottomSheet = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsBus,
+                                    contentDescription = "Voltar para lista de rotas"
+                                )
+                            }
+
+                            Text(
+                                "Detalhes da Rota de Autocarro",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Resumo da rota
+                        currentRoute.legs?.firstOrNull()?.let { firstLeg ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "De: ${firstLeg.startAddress ?: "Origem"}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Para: ${firstLeg.endAddress ?: "Destino"}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text(
+                                                "Duração:",
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                            Text(
+                                                firstLeg.duration?.text ?: "N/A",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                "Distância:",
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                            Text(
+                                                firstLeg.distance?.text ?: "N/A",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Filtros para visualização
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            FilterChip(
+                                selected = highlightWalkingPath,
+                                onClick = { highlightWalkingPath = !highlightWalkingPath },
+                                label = { Text("Caminhos a Pé") },
+                                leadingIcon = if (highlightWalkingPath) {
+                                    { Icon(Icons.Filled.MyLocation, contentDescription = null) }
+                                } else null
+                            )
+
+                            FilterChip(
+                                selected = highlightBusPath,
+                                onClick = { highlightBusPath = !highlightBusPath },
+                                label = { Text("Rota do Autocarro") },
+                                leadingIcon = if (highlightBusPath) {
+                                    { Icon(Icons.Filled.DirectionsBus, contentDescription = null) }
+                                } else null
+                            )
+
+                            FilterChip(
+                                selected = highlightBusStops,
+                                onClick = { highlightBusStops = !highlightBusStops },
+                                label = { Text("Paragens") },
+                                leadingIcon = if (highlightBusStops) {
+                                    { Icon(Icons.Filled.DirectionsBus, contentDescription = null) }
+                                } else null
+                            )
+                        }
+
                         Text(
                             "Itinerário Detalhado:",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
-                        LazyColumn(modifier = Modifier.fillMaxHeight(0.6f)) {
+
+                        LazyColumn(modifier = Modifier.fillMaxHeight(0.5f)) {
                             currentRoute.legs?.forEachIndexed { legIndex, leg ->
-                                item(key = "leg_header_$legIndex") {
-                                    Text(
-                                        "Parte ${legIndex + 1}: De ${leg.startAddress ?: "Início"} para ${leg.endAddress ?: "Fim"}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier.padding(vertical = 8.dp)
-                                    )
-                                }
-                                items(
-                                    items = leg.steps ?: emptyList(),
-                                    key = { step -> "step_${legIndex}_${step.hashCode()}" }) { step ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        elevation = CardDefaults.cardElevation(1.dp)
-                                    ) {
-                                        // Conteúdo do Card do step como antes...
+                                leg.steps?.forEachIndexed { stepIndex, step ->
+                                    item(key = "step_${legIndex}_${stepIndex}") {
+                                        RouteStepItem(step = step)
                                     }
                                 }
                             }
                             item { Spacer(modifier = Modifier.height(paddingValues.calculateBottomPadding() + 16.dp)) }
-                        }
-                        Button(
-                            onClick = {
-                                selectedRoute = null
-                                coroutineScope.launch {
-                                    if (routesList.isNotEmpty()) {
-                                        sheetState.bottomSheetState.partialExpand()
-                                    } else {
-                                        // Em vez de chamar hide(), apenas atualizamos a variável
-                                        shouldShowBottomSheet = false
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .padding(vertical = 8.dp)
-                                .fillMaxWidth()
-                        ) {
-                            Text("Ver outras rotas")
                         }
                     } else if (isLoadingDirections) {
                         Box(
                             modifier = Modifier.fillMaxWidth().height(100.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator()
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("A procurar rotas de autocarro...")
+                            }
                         }
                     } else if (directionsErrorMessage != null) {
-                        Text(
-                            directionsErrorMessage!!,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(16.dp)
-                                .align(Alignment.CenterHorizontally)
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                directionsErrorMessage!!,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     } else {
-                        Text(
-                            "Insira a origem e o destino para ver as rotas de autocarro.",
-                            modifier = Modifier.padding(16.dp)
-                                .align(Alignment.CenterHorizontally)
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Insira a origem e o destino para ver as rotas de autocarro disponíveis.",
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.navigationBarsPadding())
                 }
@@ -400,90 +517,94 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 )
             ) {
                 selectedRoute?.let { currentRoute ->
-                    currentRoute.overviewPolyline?.points?.let { encodedPolyline: String ->
-                        val decodedPath: List<LatLng> = decodePolyline(encodedPolyline)
-                        if (decodedPath.isNotEmpty()) {
-                            Polyline(
-                                points = decodedPath,
-                                color = Color.Blue,
-                                width = 10f,
-                                zIndex = 1f
-                            )
+                    // Desenhar o poliline geral da rota para referência
+                    if (highlightBusPath) {
+                        currentRoute.overviewPolyline?.points?.let { encodedPolyline: String ->
+                            val decodedPath: List<LatLng> = decodePolyline(encodedPolyline)
+                            if (decodedPath.isNotEmpty()) {
+                                Polyline(
+                                    points = decodedPath,
+                                    color = Color.Gray.copy(alpha = 0.3f),
+                                    width = 5f,
+                                    zIndex = 0.5f
+                                )
+                            }
                         }
                     }
+
+                    // Processar os detalhes de cada perna da rota
                     currentRoute.legs?.forEach { leg: Leg ->
-                        leg.startLocation?.let { startLoc: LocationPoint ->
-                            if (startLoc.lat != null && startLoc.lng != null) {
-                                Marker(
-                                    state = rememberMarkerState(
-                                        position = LatLng(
-                                            startLoc.lat!!,
-                                            startLoc.lng!!
-                                        )
-                                    ), title = "Início: ${leg.startAddress ?: ""}"
-                                )
-                            }
-                        }
-                        leg.endLocation?.let { endLoc: LocationPoint ->
-                            if (endLoc.lat != null && endLoc.lng != null) {
-                                Marker(
-                                    state = rememberMarkerState(
-                                        position = LatLng(
-                                            endLoc.lat!!,
-                                            endLoc.lng!!
-                                        )
-                                    ), title = "Fim: ${leg.endAddress ?: ""}"
-                                )
-                            }
-                        }
                         leg.steps?.forEach { step: Step ->
-                            step.polyline?.points?.let { stepEncodedPolyline: String ->
-                                val stepPath: List<LatLng> = decodePolyline(stepEncodedPolyline)
-                                if (stepPath.isNotEmpty()) {
-                                    val pattern: List<PatternItem>? =
-                                        if (step.travelMode == "WALKING") listOf(
-                                            Dash(20f),
-                                            Gap(10f)
-                                        ) else null
-                                    Polyline(
-                                        points = stepPath,
-                                        color = if (step.travelMode == "WALKING") Color.DarkGray else Color(
-                                            0xFFE57373
-                                        ),
-                                        width = 7f, pattern = pattern, zIndex = 0.5f
-                                    )
-                                }
-                            }
-                            if (step.travelMode == "TRANSIT") {
-                                step.transitDetails?.departureStop?.let { depStop: StopPoint ->
-                                    depStop.location?.let { depLoc: LocationPoint ->
-                                        if (depLoc.lat != null && depLoc.lng != null) {
-                                            Marker(
-                                                state = rememberMarkerState(
-                                                    position = LatLng(
-                                                        depLoc.lat!!,
-                                                        depLoc.lng!!
-                                                    )
-                                                ),
-                                                title = "Embarque: ${depStop.name ?: "Paragem"}",
-                                                snippet = "Linha: ${step.transitDetails?.line?.shortName ?: step.transitDetails?.line?.name ?: ""}"
-                                            )
+                            when (step.travelMode) {
+                                "WALKING" -> {
+                                    if (highlightWalkingPath) {
+                                        step.polyline?.points?.let { stepEncodedPolyline: String ->
+                                            val stepPath: List<LatLng> = decodePolyline(stepEncodedPolyline)
+                                            if (stepPath.isNotEmpty()) {
+                                                Polyline(
+                                                    points = stepPath,
+                                                    color = Color(0xFF4CAF50), // Verde para caminhada
+                                                    width = 8f,
+                                                    pattern = listOf(Dash(20f), Gap(10f)),
+                                                    zIndex = 1f
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                                step.transitDetails?.arrivalStop?.let { arrStop: StopPoint ->
-                                    arrStop.location?.let { arrLoc: LocationPoint ->
-                                        if (arrLoc.lat != null && arrLoc.lng != null) {
-                                            Marker(
-                                                state = rememberMarkerState(
-                                                    position = LatLng(
-                                                        arrLoc.lat!!,
-                                                        arrLoc.lng!!
+                                "TRANSIT" -> {
+                                    if (highlightBusPath) {
+                                        // Destacar o percurso do ônibus
+                                        step.polyline?.points?.let { stepEncodedPolyline: String ->
+                                            val stepPath: List<LatLng> = decodePolyline(stepEncodedPolyline)
+                                            if (stepPath.isNotEmpty()) {
+                                                Polyline(
+                                                    points = stepPath,
+                                                    color = Color(0xFF1976D2), // Azul para ônibus
+                                                    width = 10f,
+                                                    zIndex = 2f
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (highlightBusStops) {
+                                        // Marcar ponto de embarque com ícone de ônibus
+                                        step.transitDetails?.departureStop?.let { depStop: StopPoint ->
+                                            depStop.location?.let { depLoc: LocationPoint ->
+                                                if (depLoc.lat != null && depLoc.lng != null) {
+                                                    Marker(
+                                                        state = rememberMarkerState(
+                                                            position = LatLng(
+                                                                depLoc.lat!!,
+                                                                depLoc.lng!!
+                                                            )
+                                                        ),
+                                                        title = "Embarque: ${depStop.name ?: "Paragem"}",
+                                                        snippet = "Linha: ${step.transitDetails?.line?.shortName ?: step.transitDetails?.line?.name ?: ""}",
+                                                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                                                     )
-                                                ),
-                                                title = "Desembarque: ${arrStop.name ?: "Paragem"}",
-                                                snippet = "Linha: ${step.transitDetails?.line?.shortName ?: step.transitDetails?.line?.name ?: ""}"
-                                            )
+                                                }
+                                            }
+                                        }
+
+                                        // Marcar ponto de desembarque com ícone de ônibus
+                                        step.transitDetails?.arrivalStop?.let { arrStop: StopPoint ->
+                                            arrStop.location?.let { arrLoc: LocationPoint ->
+                                                if (arrLoc.lat != null && arrLoc.lng != null) {
+                                                    Marker(
+                                                        state = rememberMarkerState(
+                                                            position = LatLng(
+                                                                arrLoc.lat!!,
+                                                                arrLoc.lng!!
+                                                            )
+                                                        ),
+                                                        title = "Desembarque: ${arrStop.name ?: "Paragem"}",
+                                                        snippet = "Linha: ${step.transitDetails?.line?.shortName ?: step.transitDetails?.line?.name ?: ""}",
+                                                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -493,41 +614,36 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 }
             }
 
-            // UI Inputs sobreposta ao Mapa - MOVIDO MAIS PARA CIMA
+            // UI Inputs sobreposta ao Mapa
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // MODIFICADO: Reduzido o padding de topo para mover os campos para cima
                     .padding(top = paddingValues.calculateTopPadding() + 2.dp)
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // MODIFICADO: Reduzido o padding para aproximar do topo
-                        .padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .shadow(8.dp),
                     shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(8.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(
-                            alpha = 0.95f
-                        )
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                     )
                 ) {
-                    // MODIFICADO: Reduzido o padding interno para ganhar espaço
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         OutlinedTextField(
                             value = originText,
                             onValueChange = {
-                                originText = it; if (it.length <= 2) originSuggestions =
-                                emptyList()
+                                originText = it
+                                if (it.length <= 2) originSuggestions = emptyList()
                             },
                             label = { Text("Ponto de partida") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .onFocusChanged {
                                     if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.ORIGIN
-                                    else if (originSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.ORIGIN && !it.isFocused) focusedFieldAuto =
-                                        FocusedFieldAuto.NONE
+                                    else if (originSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.ORIGIN && !it.isFocused)
+                                        focusedFieldAuto = FocusedFieldAuto.NONE
                                 },
                             trailingIcon = if (originText.isNotEmpty()) {
                                 {
@@ -540,14 +656,12 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                             } else null,
                             singleLine = true
                         )
+
                         AnimatedVisibility(visible = originSuggestions.isNotEmpty() && focusedFieldAuto == FocusedFieldAuto.ORIGIN) {
                             LazyColumn(
-                                modifier = Modifier.heightIn(max = 150.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.98f
-                                        )
-                                    )
+                                modifier = Modifier
+                                    .heightIn(max = 150.dp)
+                                    .background(MaterialTheme.colorScheme.surface)
                             ) {
                                 items(originSuggestions) { suggestion: PlacePrediction ->
                                     Text(
@@ -565,24 +679,22 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                 }
                             }
                         }
-                        // MODIFICADO: Reduzido espaço entre os campos
-                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedTextField(
                             value = destinationText,
                             onValueChange = {
-                                destinationText =
-                                    it; if (it.length <= 2) destinationSuggestions =
-                                emptyList()
+                                destinationText = it
+                                if (it.length <= 2) destinationSuggestions = emptyList()
                             },
                             label = { Text("Ponto de destino") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .onFocusChanged {
-                                    if (it.isFocused) focusedFieldAuto =
-                                        FocusedFieldAuto.DESTINATION
-                                    else if (destinationSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.DESTINATION && !it.isFocused) focusedFieldAuto =
-                                        FocusedFieldAuto.NONE
+                                    if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.DESTINATION
+                                    else if (destinationSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.DESTINATION && !it.isFocused)
+                                        focusedFieldAuto = FocusedFieldAuto.NONE
                                 },
                             trailingIcon = if (destinationText.isNotEmpty()) {
                                 {
@@ -595,14 +707,12 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                             } else null,
                             singleLine = true
                         )
+
                         AnimatedVisibility(visible = destinationSuggestions.isNotEmpty() && focusedFieldAuto == FocusedFieldAuto.DESTINATION) {
                             LazyColumn(
-                                modifier = Modifier.heightIn(max = 150.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.98f
-                                        )
-                                    )
+                                modifier = Modifier
+                                    .heightIn(max = 150.dp)
+                                    .background(MaterialTheme.colorScheme.surface)
                             ) {
                                 items(destinationSuggestions) { suggestion: PlacePrediction ->
                                     Text(
@@ -620,8 +730,8 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                 }
                             }
                         }
-                        // MODIFICADO: Reduzido espaço antes do botão
-                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
@@ -631,6 +741,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                     selectedRoute = null
                                     routesList = emptyList()
                                     focusManager.clearFocus()
+
                                     coroutineScope.launch {
                                         val result: Result<List<Route>> =
                                             fetchGoogleDirections(originText, destinationText)
@@ -638,10 +749,26 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                         if (result.isSuccess) {
                                             val fetchedRoutes: List<Route> =
                                                 result.getOrNull() ?: emptyList()
-                                            routesList = fetchedRoutes
-                                            if (fetchedRoutes.isEmpty()) directionsErrorMessage =
-                                                "Nenhuma rota de autocarro encontrada."
-                                            else { /* Lógica de animar câmara para a primeira rota */
+
+                                            // Filtrar apenas rotas que incluem transporte público (ônibus)
+                                            val busRoutes = fetchedRoutes.filter { route ->
+                                                route.legs?.any { leg ->
+                                                    leg.steps?.any { step ->
+                                                        step.travelMode == "TRANSIT" &&
+                                                                (step.transitDetails?.line?.vehicle?.type == "BUS" ||
+                                                                        step.transitDetails?.line?.vehicle?.name?.contains("Bus", ignoreCase = true) == true)
+                                                    } == true
+                                                } == true
+                                            }
+
+                                            routesList = busRoutes
+
+                                            if (busRoutes.isEmpty()) {
+                                                if (fetchedRoutes.isEmpty()) {
+                                                    directionsErrorMessage = "Nenhuma rota encontrada."
+                                                } else {
+                                                    directionsErrorMessage = "Nenhuma rota de autocarro disponível entre estes pontos."
+                                                }
                                             }
                                         } else {
                                             val exception: Throwable? = result.exceptionOrNull()
@@ -649,28 +776,34 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                                 "Erro: ${exception?.message ?: "Desconhecido"}"
                                         }
                                     }
-                                } else directionsErrorMessage = "Preencha a origem e o destino."
+                                } else {
+                                    directionsErrorMessage = "Preencha a origem e o destino."
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isLoadingDirections && !isLoadingAutocomplete
                         ) {
-                            if (isLoadingDirections) CircularProgressIndicator(
-                                Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            else Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.Search,
-                                    "Buscar"
-                                ); Spacer(Modifier.width(8.dp)); Text("Buscar Rotas")
+                            if (isLoadingDirections) {
+                                CircularProgressIndicator(
+                                    Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.DirectionsBus, "Buscar")
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Buscar Autocarros")
+                                }
                             }
                         }
                     }
                 }
+
                 if (isLoadingAutocomplete) {
                     LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
@@ -683,13 +816,237 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                     .align(Alignment.BottomStart)
                     .padding(paddingValues)
                     .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
                 Icon(
                     Icons.Filled.MyLocation,
                     contentDescription = "Centrar na minha localização"
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun BusRouteCard(route: Route, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val firstLeg = route.legs?.firstOrNull()
+
+            // Número da rota ou linha principal (se disponível)
+            val mainBusLine = firstLeg?.steps?.find {
+                it.travelMode == "TRANSIT" && it.transitDetails?.line != null
+            }?.transitDetails?.line
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DirectionsBus,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (mainBusLine?.shortName != null) {
+                            "Linha ${mainBusLine.shortName}"
+                        } else if (mainBusLine?.name != null) {
+                            mainBusLine.name ?: "Autocarro"
+                        } else {
+                            "Rota via autocarro"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = route.summary ?: "Rota de Autocarro",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "Duração",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Text(
+                        firstLeg?.duration?.text ?: "N/A",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Column {
+                    Text(
+                        "Distância",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Text(
+                        firstLeg?.distance?.text ?: "N/A",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+
+            }
+
+            // Número de transferências
+            val transfers = route.legs?.sumOf { leg ->
+                leg.steps?.count { it.travelMode == "TRANSIT" } ?: 0
+            }?.minus(1) ?: 0
+
+            if (transfers > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$transfers transferência${if (transfers > 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RouteStepItem(step: Step) {
+    val stepType = when (step.travelMode) {
+        "WALKING" -> TravelStepType.WALKING
+        "TRANSIT" -> TravelStepType.BUS
+        else -> TravelStepType.TRANSFER
+    }
+
+    val (backgroundColor, contentColor) = when (stepType) {
+        TravelStepType.WALKING -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32))
+        TravelStepType.BUS -> Pair(Color(0xFFE3F2FD), Color(0xFF1565C0))
+        TravelStepType.TRANSFER -> Pair(Color(0xFFFFFDE7), Color(0xFFFF8F00))
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Ícone baseado no tipo de passo
+            when (stepType) {
+                TravelStepType.WALKING -> {
+                    Icon(
+                        imageVector = Icons.Default.MyLocation,
+                        contentDescription = "Caminhar",
+                        tint = contentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                TravelStepType.BUS -> {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsBus,
+                        contentDescription = "Autocarro",
+                        tint = contentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                TravelStepType.TRANSFER -> {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsBus,
+                        contentDescription = "Transferência",
+                        tint = contentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                when (stepType) {
+                    TravelStepType.WALKING -> {
+                        Text(
+                            text = "Caminhar ${step.distance?.text ?: ""}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor
+                        )
+                        Text(
+                            text = step.htmlInstructions?.replace("<[^>]*>".toRegex(), "") ?: "Siga a pé",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f)
+                        )
+                    }
+                    TravelStepType.BUS -> {
+                        val busLine = step.transitDetails?.line
+                        Text(
+                            text = if (busLine?.shortName != null) {
+                                "Autocarro ${busLine.shortName}"
+                            } else if (busLine?.name != null) {
+                                busLine.name ?: "Autocarro"
+                            } else {
+                                "Autocarro"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor
+                        )
+                        Text(
+                            text = "De: ${step.transitDetails?.departureStop?.name ?: "?"} → Para: ${step.transitDetails?.arrivalStop?.name ?: "?"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = "Duração: ${step.duration?.text ?: "?"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f)
+                        )
+                    }
+                    TravelStepType.TRANSFER -> {
+                        Text(
+                            text = "Transferência",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor
+                        )
+                        Text(
+                            text = step.htmlInstructions?.replace("<[^>]*>".toRegex(), "") ?: "Faça a transferência",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -704,16 +1061,15 @@ suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlaceP
     }
     val client = OkHttpClient()
 
-    // CORREÇÃO: Simplificamos os parâmetros, mantendo apenas os essenciais e compatíveis
+    val encodedInput = URLEncoder.encode(input, "UTF-8")
     val url = "https://maps.googleapis.com/maps/api/place/autocomplete/json" +
-            "?input=$input" +
+            "?input=$encodedInput" +
             "&language=pt-PT" +
             "&components=country:PT" +
             "&location=${AVEIRO_LOCATION_CENTER.latitude},${AVEIRO_LOCATION_CENTER.longitude}" +
-            "&radius=10000" + // Raio reduzido para 10km
+            "&radius=$AUTOCOMPLETE_RADIUS_METERS" +
             "&key=$apiKey"
 
-    // IMPORTANTE: Log para depuração - verificar a URL que está sendo chamada
     Log.d("Autocomplete", "Requesting URL: $url")
     val request = Request.Builder().url(url).build()
 
@@ -728,14 +1084,12 @@ suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlaceP
             response.body?.string()
         }
         if (responseBody != null) {
-            // ADICIONAL: Log para verificar o formato da resposta
             Log.d("Autocomplete", "Response: $responseBody")
 
             val gson = Gson()
             val apiResponse: PlacesAutocompleteResponse =
                 gson.fromJson(responseBody, PlacesAutocompleteResponse::class.java)
             if (apiResponse.status == "OK" || apiResponse.status == "ZERO_RESULTS") {
-                // ADICIONAL: Log para verificar quantas sugestões estão retornando
                 Log.d("Autocomplete", "Encontradas ${apiResponse.predictions?.size ?: 0} sugestões")
                 Result.success(apiResponse.predictions ?: emptyList())
             } else {
@@ -755,7 +1109,7 @@ suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlaceP
     }
 }
 
-// Directions API implementation
+// Directions API implementation - MODIFICADO para transporte de ônibus
 suspend fun fetchGoogleDirections(origin: String, destination: String): Result<List<Route>> {
     val apiKey = GOOGLE_API_KEY
     if (apiKey.isEmpty()) {
@@ -764,13 +1118,18 @@ suspend fun fetchGoogleDirections(origin: String, destination: String): Result<L
     }
 
     val client = OkHttpClient()
+
+    val encodedOrigin = URLEncoder.encode(origin, "UTF-8")
+    val encodedDestination = URLEncoder.encode(destination, "UTF-8")
+
+    // IMPORTANTE: Parâmetros ajustados para garantir rotas de ônibus
     val url = "https://maps.googleapis.com/maps/api/directions/json" +
-            "?origin=$origin" +
-            "&destination=$destination" +
+            "?origin=$encodedOrigin" +
+            "&destination=$encodedDestination" +
             "&mode=transit" +
-            "&transit_mode=bus" +
+            "&transit_mode=bus" + // Especifica explicitamente apenas ônibus
+            "&alternatives=true" + // Retorna múltiplas alternativas se disponíveis
             "&language=pt-PT" +
-            "&alternatives=true" +
             "&key=$apiKey"
 
     Log.d("Directions", "Requesting URL: $url")
@@ -843,7 +1202,6 @@ fun decodePolyline(encoded: String): List<LatLng> {
     return poly
 }
 
-// Preview moved outside the composable function
 @Preview(showBackground = true, locale = "pt")
 @Composable
 fun RouteSearchScreenPreview() {
