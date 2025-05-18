@@ -1,10 +1,17 @@
 plugins {
+    // Mantenha os seus aliases existentes.
+    // Esta linha aplica o plugin 'com.android.application' usando a versão definida no seu ficheiro libs.versions.toml.
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.compose) // Se estiver a usar Jetpack Compose
+
+    // A linha abaixo era redundante porque o alias(libs.plugins.android.application) já declara e aplica o plugin.
+    // Manter ambas as declarações causa o erro "Plugin with id 'com.android.application' was already requested".
+    // id("com.android.application") version "8.9.1" apply false // REMOVIDA
+
 }
 
-android {
+    android {
     namespace = "com.example.aveirobus"
     compileSdk = 35
 
