@@ -1,20 +1,13 @@
 package com.example.aveirobus.ui.navigation
 
-import android.util.Log
-import androidx.compose.foundation.layout.PaddingValues // Import PaddingValues
+import androidx.compose.foundation.layout.PaddingValues
+// import androidx.compose.foundation.layout.padding // Não é usado diretamente aqui se removido do NavHost
+// import androidx.compose.ui.Modifier // Não é usado diretamente aqui se removido do NavHost
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.aveirobus.ui.screens.AiChat
-import com.example.aveirobus.ui.screens.Autocarros
-import com.example.aveirobus.ui.screens.Avisos
-import com.example.aveirobus.ui.screens.Carteira
-import com.example.aveirobus.ui.screens.LoginScreen
-import com.example.aveirobus.ui.screens.Opcoes
-import com.example.aveirobus.ui.screens.UserProfileScreen
-import com.example.aveirobus.ui.navigation.BottomNavItem
-import com.example.aveirobus.ui.navigation.TopNavItem
+import com.example.aveirobus.ui.screens.*
 
 @Composable
 fun NavigationGraph(
@@ -23,41 +16,47 @@ fun NavigationGraph(
     onLoginSuccess: () -> Unit,
     onLoginFailure: () -> Unit,
     onLogout: () -> Unit,
-    paddingValues: PaddingValues // Added this parameter
+    paddingValues: PaddingValues // Receber paddingValues do Scaffold
 ) {
     NavHost(
         navController = navController,
         startDestination = BottomNavItem.Autocarros.route
-        // No need to apply padding here if applying to individual screens
+        // REMOVIDO: modifier = Modifier.padding(paddingValues)
+        // O padding será aplicado individualmente a cada ecrã que o necessite.
     ) {
         composable(BottomNavItem.Autocarros.route) {
-            // Pass paddingValues to Autocarros if it uses Scaffold padding
-            Autocarros()
+            // RouteSearchScreen precisa do paddingValues para o layout edge-to-edge do mapa
+            // e para posicionar a sua UI sobreposta corretamente.
+            RouteSearchScreen(paddingValues = paddingValues)
         }
         composable(BottomNavItem.Avisos.route) {
-            // Pass paddingValues to Avisos if it uses Scaffold padding
+            // Avisos também recebe paddingValues para aplicar ao seu layout raiz.
             Avisos(paddingValues = paddingValues)
         }
         composable(BottomNavItem.AiChat.route) {
-            // Use the paddingValues parameter from NavigationGraph
-            Log.d("NavigationGraph", "AiChat composable entered")
-            AiChat(paddingValues = paddingValues) // Pass paddingValues here
+            // AiChat também recebe paddingValues.
+            AiChat(paddingValues = paddingValues)
         }
         composable(BottomNavItem.Carteira.route) {
-            // Pass paddingValues to Carteira if it uses Scaffold padding
-            Carteira()
+            // Se Carteira deve respeitar o padding do Scaffold, ela também deve aceitar paddingValues.
+            // Se for de ecrã inteiro, não precisa. Assumindo que precisa:
+            Carteira(paddingValues = paddingValues)
         }
         composable(BottomNavItem.Opcoes.route) {
-            // Pass paddingValues to Opcoes if it uses Scaffold padding
-            Opcoes()
+            // Se Opcoes deve respeitar o padding do Scaffold, ela também deve aceitar paddingValues.
+            // Assumindo que precisa:
+            Opcoes(paddingValues = paddingValues)
         }
+
+        // Ecrãs que NÃO usam o padding do Scaffold (são de ecrã inteiro)
         composable(TopNavItem.LoginScreen.route) {
-            // Login screen likely doesn't need Scaffold padding if it's full screen
-            LoginScreen(onLoginSuccess, onLoginFailure)
+            LoginScreen(onLoginSuccess, onLoginFailure) // Não passa paddingValues
         }
         composable("userProfile") {
-            // Pass paddingValues to UserProfileScreen if it uses Scaffold padding
-            UserProfileScreen(onLogout)
+            UserProfileScreen(onLogout) // Não passa paddingValues
+        }
+        composable("register") {
+            RegisterScreen() // Não passa paddingValues
         }
     }
 }

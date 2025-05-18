@@ -1,18 +1,29 @@
-package com.example.aveirobus
+@file:OptIn(ExperimentalMaterial3Api::class)
 
+package com.example.aveirobus // Certifique-se que o package name está correto
+
+import android.graphics.Color as AndroidColor // Alias para evitar conflito com androidx.compose.ui.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle          // Importação para SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge       // Importação para enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme // Importação para isSystemInDarkTheme()
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.aveirobus.ui.theme.AveiroBusTheme // Import your theme
+import com.example.aveirobus.ui.theme.AveiroBusTheme
 import com.example.aveirobus.ui.MyTopAppBar
 import com.example.aveirobus.ui.navigation.BottomNavigationBar
 import com.example.aveirobus.ui.navigation.NavigationGraph
@@ -21,82 +32,81 @@ import com.example.aveirobus.ui.navigation.TopNavItem
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // enableEdgeToEdge() // Consider if you need this when using Scaffold with default insets
+        // ATIVAR EDGE-TO-EDGE ANTES DE setContent
+        // A chamada simplificada enableEdgeToEdge() usa os padrões para transparência
+        // e ajusta automaticamente a cor dos ícones da barra de status/navegação.
+        enableEdgeToEdge()
 
+        super.onCreate(savedInstanceState)
         setContent {
-            AveiroBusTheme { // Apply your app's theme
-                var isLoggedIn by remember { mutableStateOf(false) } // State variable for login status
-                val navController = rememberNavController() // Create a NavController
+            AveiroBusTheme {
+                var isLoggedIn by remember { mutableStateOf(false) }
+                val navController = rememberNavController()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     topBar = {
-                        // Get the current back stack entry to determine the current route
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentRoute = navBackStackEntry?.destination?.route
-
-                        // Determine if back navigation is possible
-                        // Generally, you can navigate back if there's a previous entry
-                        // and you are not on the starting destination of your graph.
                         val canNavigateBack = navController.previousBackStackEntry != null &&
-                                             currentRoute != navController.graph.startDestinationRoute // Assuming graph.startDestinationRoute is your main screen route
+                                currentRoute != BottomNavItem.Autocarros.route
 
                         MyTopAppBar(
                             isLoggedIn = isLoggedIn,
                             onUserButtonClick = {
                                 if (isLoggedIn) {
-                                    navController.navigate("userProfile") // Use the correct user profile route
+                                    navController.navigate("userProfile") { launchSingleTop = true }
                                 } else {
-                                    navController.navigate(TopNavItem.LoginScreen.route) // Use the correct login route
+                                    navController.navigate(TopNavItem.LoginScreen.route) { launchSingleTop = true }
                                 }
                             },
-                            // Pass the necessary information and action to MyTopAppBar
                             currentRoute = currentRoute,
                             canNavigateBack = canNavigateBack,
-                            navigateUp = { navController.popBackStack() } // This function triggers going back
+                            navigateUp = { navController.navigateUp() }
                         )
                     },
-                    bottomBar = { BottomNavigationBar(navController = navController) }
-                ) { paddingValues -> // This lambda receives the padding values from Scaffold
-                    println("Scaffold content called with padding: $paddingValues") // Log to see padding values
+                    bottomBar = {
+                        val navBackStackEntry by navController.currentBackStackEntryAsState()
+                        val currentRoute = navBackStackEntry?.destination?.route
+                        val screensWithoutBottomBar = listOf(
+                            TopNavItem.LoginScreen.route,
+                            "userProfile",
+                            "register"
+                        )
+
+                        if (currentRoute !in screensWithoutBottomBar) {
+                            Surface(
+                                // Para um efeito de "vidro fosco" ou semi-transparente, pode usar:
+                                // color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
+                                // Para totalmente transparente para ver o mapa por baixo:
+                                color = Color.Transparent,
+                            ) {
+                                BottomNavigationBar(navController = navController)
+                            }
+                        }
+                    },
+                    containerColor = Color.Transparent // Container do Scaffold transparente
+                ) { innerPadding ->
+                    Log.d("MainActivity", "Scaffold innerPadding: $innerPadding")
                     NavigationGraph(
                         navController = navController,
                         isLoggedIn = isLoggedIn,
                         onLoginSuccess = {
-                            println("Login success")
                             isLoggedIn = true
-                            // Clear back stack and navigate to a main screen after login
-                            navController.popBackStack(navController.graph.startDestinationId, inclusive = false)
-                            navController.navigate(BottomNavItem.Autocarros.route) // Navigate to a starting screen
-                        },
-                        onLoginFailure = {
-                            println("Login failure")
-                            // Consider showing an error message instead of just waiting and navigating back
-                            // You might want to stay on the login screen and show an error message
-                            // If you must navigate back after a delay (which is unusual UX):
-                            // You'd need to use a coroutine for a delay in Compose, not Thread.sleep
-                            // Coroutine example (requires adding lifecycle-runtime-compose dependency):
-                            /*
-                            CoroutineScope(Dispatchers.Main).launch {
-                                delay(5000) // Delay for 5 seconds
-                                navController.popBackStack()
-                                navController.navigate(TopNavItem.LoginScreen.route)
+                            navController.navigate(BottomNavItem.Autocarros.route) {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
                             }
-                            */
-                            // For now, removing the problematic Thread.sleep and immediate navigation
-                            isLoggedIn = false // Ensure isLoggedIn is false on failure
-                            // navController.popBackStack() // Consider if you want to pop back on failure
-                            // navController.navigate(TopNavItem.LoginScreen.route) // Consider if you want to navigate back
                         },
+                        onLoginFailure = { isLoggedIn = false },
                         onLogout = {
-                            println("Logout")
                             isLoggedIn = false
-                            // Clear back stack and navigate to a main screen after logout
-                            navController.popBackStack(navController.graph.startDestinationId, inclusive = false)
-                            navController.navigate(BottomNavItem.Autocarros.route) // Navigate to a starting screen
+                            navController.navigate(BottomNavItem.Autocarros.route) {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         },
-                        paddingValues = paddingValues // Pass the padding values to your NavigationGraph
+                        paddingValues = innerPadding
                     )
                 }
             }
