@@ -15,10 +15,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.ModalBottomSheetLayout
 import androidx.compose.material3.ModalBottomSheetValue // <<< IMPORTAÇÃO ADICIONADA
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -78,9 +79,9 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
     var focusedFieldAuto by remember { mutableStateOf(FocusedFieldAuto.NONE) }
     var autocompleteJob by remember { mutableStateOf<Job?>(null) }
     val focusManager = LocalFocusManager.current
+
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = false, // Permite estado meio expandido
         initialValue = if (routesList.isEmpty() && selectedRoute == null && directionsErrorMessage == null) ModalBottomSheetValue.Hidden else ModalBottomSheetValue.PartiallyExpanded,)
 
     val cameraPositionState: CameraPositionState = rememberCameraPositionState {
@@ -436,7 +437,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                         value = originText,
                         onValueChange = { originText = it; if(it.length <=2) originSuggestions = emptyList() },
                         label = { Text("Ponto de partida") },
-                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.ORIGIN else if(originSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.ORIGIN) focusedFieldAuto = FocusedFieldAuto.NONE },
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.ORIGIN else if(originSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.ORIGIN && !it.isFocused) focusedFieldAuto = FocusedFieldAuto.NONE },
                         trailingIcon = if (originText.isNotEmpty()) { { IconButton(onClick = { originText = ""; originSuggestions = emptyList(); focusedFieldAuto = FocusedFieldAuto.NONE }) { Icon(Icons.Filled.Clear, "Limpar") } } } else null,
                         singleLine = true
                     )
@@ -455,7 +456,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                         value = destinationText,
                         onValueChange = { destinationText = it; if(it.length <=2) destinationSuggestions = emptyList() },
                         label = { Text("Ponto de destino") },
-                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.DESTINATION else if(destinationSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.DESTINATION) focusedFieldAuto = FocusedFieldAuto.NONE },
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focusedFieldAuto = FocusedFieldAuto.DESTINATION else if(destinationSuggestions.isEmpty() && focusedFieldAuto == FocusedFieldAuto.DESTINATION && !it.isFocused) focusedFieldAuto = FocusedFieldAuto.NONE },
                         trailingIcon = if (destinationText.isNotEmpty()) { { IconButton(onClick = { destinationText = ""; destinationSuggestions = emptyList(); focusedFieldAuto = FocusedFieldAuto.NONE }) { Icon(Icons.Filled.Clear, "Limpar") } } } else null,
                         singleLine = true
                     )
