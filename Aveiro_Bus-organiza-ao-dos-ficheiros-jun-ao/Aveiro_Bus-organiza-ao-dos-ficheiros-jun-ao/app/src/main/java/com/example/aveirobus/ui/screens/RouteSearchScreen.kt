@@ -52,7 +52,8 @@ import androidx.compose.ui.unit.LayoutDirection
 // Constants
 private const val GOOGLE_API_KEY = "AIzaSyDdDNIdV5OVmv6zcEIhEHmmiS-BEzajNcU"
 private val AVEIRO_LOCATION_CENTER = LatLng(40.64427, -8.64554)
-private const val AUTOCOMPLETE_RADIUS_METERS = 20000 // 20km
+// Reduzido para 10km para focar mais em Aveiro
+private const val AUTOCOMPLETE_RADIUS_METERS = 10000
 
 private enum class FocusedFieldAuto { NONE, ORIGIN, DESTINATION }
 
@@ -76,7 +77,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
 
     val context = LocalContext.current
 
-    // SOLUÇÃO 1: Usar uma variável para controlar manualmente a visibilidade do BottomSheet
+    // Usar uma variável para controlar manualmente a visibilidade do BottomSheet
     var shouldShowBottomSheet by remember { mutableStateOf(false) }
 
     // Usar o rememberBottomSheetScaffoldState padrão, sem configuração personalizada
@@ -168,7 +169,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
         }
     }
 
-    // SOLUÇÃO 2: Substituir o LaunchedEffect pelo controle manual do estado do BottomSheet
+    // Substituir o LaunchedEffect pelo controle manual do estado do BottomSheet
     LaunchedEffect(routesList, selectedRoute, directionsErrorMessage, isLoadingDirections) {
         shouldShowBottomSheet = routesList.isNotEmpty() || selectedRoute != null ||
                 directionsErrorMessage != null || isLoadingDirections
@@ -340,8 +341,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                     if (routesList.isNotEmpty()) {
                                         sheetState.bottomSheetState.partialExpand()
                                     } else {
-                                        // SOLUÇÃO 3: Em vez de chamar hide(), apenas atualizamos a variável
-                                        // e alteramos a altura de pico do sheet para 0.dp
+                                        // Em vez de chamar hide(), apenas atualizamos a variável
                                         shouldShowBottomSheet = false
                                     }
                                 }
@@ -379,7 +379,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
         },
         scaffoldState = sheetState,
         sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        // SOLUÇÃO 4: Usar a variável shouldShowBottomSheet para controlar a altura de pico
+        // Usar a variável shouldShowBottomSheet para controlar a altura de pico
         sheetPeekHeight = if (shouldShowBottomSheet) 200.dp else 0.dp,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -493,16 +493,18 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                 }
             }
 
-            // UI Inputs sobreposta ao Mapa
+            // UI Inputs sobreposta ao Mapa - MOVIDO MAIS PARA CIMA
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = paddingValues.calculateTopPadding())
+                    // MODIFICADO: Reduzido o padding de topo para mover os campos para cima
+                    .padding(top = paddingValues.calculateTopPadding() + 2.dp)
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                        // MODIFICADO: Reduzido o padding para aproximar do topo
+                        .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(8.dp),
                     colors = CardDefaults.cardColors(
@@ -511,7 +513,8 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                         )
                     )
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    // MODIFICADO: Reduzido o padding interno para ganhar espaço
+                    Column(modifier = Modifier.padding(12.dp)) {
                         OutlinedTextField(
                             value = originText,
                             onValueChange = {
@@ -562,7 +565,9 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        // MODIFICADO: Reduzido espaço entre os campos
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         OutlinedTextField(
                             value = destinationText,
                             onValueChange = {
@@ -615,7 +620,9 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        // MODIFICADO: Reduzido espaço antes do botão
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         Button(
                             onClick = {
                                 if (originText.isNotBlank() && destinationText.isNotBlank()) {
@@ -688,7 +695,7 @@ fun RouteSearchScreen(paddingValues: PaddingValues = PaddingValues(0.dp)) {
     }
 }
 
-// Place Autocomplete implementation
+// Place Autocomplete implementation - MODIFICADO para priorizar Aveiro
 suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlacePrediction>> {
     val apiKey = GOOGLE_API_KEY
     if (apiKey.isEmpty()) {
@@ -696,14 +703,17 @@ suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlaceP
         return Result.failure(IOException("Chave de API não configurada."))
     }
     val client = OkHttpClient()
+
+    // CORREÇÃO: Simplificamos os parâmetros, mantendo apenas os essenciais e compatíveis
     val url = "https://maps.googleapis.com/maps/api/place/autocomplete/json" +
             "?input=$input" +
             "&language=pt-PT" +
             "&components=country:PT" +
-            "&locationbias=circle:$AUTOCOMPLETE_RADIUS_METERS@${AVEIRO_LOCATION_CENTER.latitude},${AVEIRO_LOCATION_CENTER.longitude}" +
-            "&types=establishment" +
+            "&location=${AVEIRO_LOCATION_CENTER.latitude},${AVEIRO_LOCATION_CENTER.longitude}" +
+            "&radius=10000" + // Raio reduzido para 10km
             "&key=$apiKey"
 
+    // IMPORTANTE: Log para depuração - verificar a URL que está sendo chamada
     Log.d("Autocomplete", "Requesting URL: $url")
     val request = Request.Builder().url(url).build()
 
@@ -718,10 +728,15 @@ suspend fun fetchPlaceAutocompleteSuggestions(input: String): Result<List<PlaceP
             response.body?.string()
         }
         if (responseBody != null) {
+            // ADICIONAL: Log para verificar o formato da resposta
+            Log.d("Autocomplete", "Response: $responseBody")
+
             val gson = Gson()
             val apiResponse: PlacesAutocompleteResponse =
                 gson.fromJson(responseBody, PlacesAutocompleteResponse::class.java)
             if (apiResponse.status == "OK" || apiResponse.status == "ZERO_RESULTS") {
+                // ADICIONAL: Log para verificar quantas sugestões estão retornando
+                Log.d("Autocomplete", "Encontradas ${apiResponse.predictions?.size ?: 0} sugestões")
                 Result.success(apiResponse.predictions ?: emptyList())
             } else {
                 Log.e(
