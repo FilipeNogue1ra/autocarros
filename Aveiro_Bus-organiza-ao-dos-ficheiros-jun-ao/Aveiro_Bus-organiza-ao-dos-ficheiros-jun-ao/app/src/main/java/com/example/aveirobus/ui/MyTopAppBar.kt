@@ -1,4 +1,4 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle

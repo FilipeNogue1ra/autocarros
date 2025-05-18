@@ -1,4 +1,4 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.screens
 
 import android.util.Log // Import Log for logging
 import androidx.compose.foundation.layout.*

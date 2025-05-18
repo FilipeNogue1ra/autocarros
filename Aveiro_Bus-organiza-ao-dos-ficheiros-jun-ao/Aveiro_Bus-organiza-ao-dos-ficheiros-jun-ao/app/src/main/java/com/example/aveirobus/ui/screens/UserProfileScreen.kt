@@ -1,4 +1,5 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.screens
+
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues

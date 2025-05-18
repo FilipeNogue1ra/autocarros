@@ -1,4 +1,4 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.navigation
 
 import android.util.Log
 import androidx.compose.foundation.layout.PaddingValues // Import PaddingValues
@@ -6,6 +6,15 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.aveirobus.ui.screens.AiChat
+import com.example.aveirobus.ui.screens.Autocarros
+import com.example.aveirobus.ui.screens.Avisos
+import com.example.aveirobus.ui.screens.Carteira
+import com.example.aveirobus.ui.screens.LoginScreen
+import com.example.aveirobus.ui.screens.Opcoes
+import com.example.aveirobus.ui.screens.UserProfileScreen
+import com.example.aveirobus.ui.navigation.BottomNavItem
+import com.example.aveirobus.ui.navigation.TopNavItem
 
 @Composable
 fun NavigationGraph(

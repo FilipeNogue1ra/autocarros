@@ -1,6 +1,8 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import com.example.aveirobus.R
+
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.AccountCircle

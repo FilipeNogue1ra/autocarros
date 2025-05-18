@@ -1,5 +1,6 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.navigation
 
+import com.example.aveirobus.ui.navigation.BottomNavItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem

@@ -13,6 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.aveirobus.ui.theme.AveiroBusTheme // Import your theme
+import com.example.aveirobus.ui.MyTopAppBar
+import com.example.aveirobus.ui.navigation.BottomNavigationBar
+import com.example.aveirobus.ui.navigation.NavigationGraph
+import com.example.aveirobus.ui.navigation.BottomNavItem
+import com.example.aveirobus.ui.navigation.TopNavItem
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

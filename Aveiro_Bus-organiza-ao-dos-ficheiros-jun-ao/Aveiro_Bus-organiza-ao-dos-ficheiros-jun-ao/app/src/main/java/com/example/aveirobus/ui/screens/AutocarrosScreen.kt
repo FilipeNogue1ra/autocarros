@@ -1,4 +1,5 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.screens
+
 
 import android.Manifest
 import android.content.Context

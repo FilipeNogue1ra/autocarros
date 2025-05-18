@@ -1,4 +1,4 @@
-package com.example.aveirobus
+package com.example.aveirobus.ui.screens
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
