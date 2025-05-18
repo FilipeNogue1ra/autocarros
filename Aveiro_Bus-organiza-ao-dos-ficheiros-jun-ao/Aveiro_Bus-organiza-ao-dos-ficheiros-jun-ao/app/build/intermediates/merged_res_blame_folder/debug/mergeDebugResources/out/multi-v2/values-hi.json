@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.example.aveirobus.app-mergeDebugResources-59:/values-hi/values-hi.xml",
+            "outputFile": "com.example.aveirobus.app-mergeDebugResources-65:/values-hi/values-hi.xml",
             "map": [
                 {
                     "source": "C:\\Users\\filip\\.gradle\\caches\\8.11.1\\transforms\\abc3c5708ba50876472a303b6fc0d84f\\transformed\\play-services-base-18.5.0\\res\\values-hi\\values.xml",

@@ -1,26 +1,25 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
-package com.example.aveirobus // Certifique-se que o package name está correto
+package com.example.aveirobus
 
-import android.graphics.Color as AndroidColor // Alias para evitar conflito com androidx.compose.ui.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle          // Importação para SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge       // Importação para enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme // Importação para isSystemInDarkTheme()
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.aveirobus.ui.theme.AveiroBusTheme
@@ -29,17 +28,46 @@ import com.example.aveirobus.ui.navigation.BottomNavigationBar
 import com.example.aveirobus.ui.navigation.NavigationGraph
 import com.example.aveirobus.ui.navigation.BottomNavItem
 import com.example.aveirobus.ui.navigation.TopNavItem
+import com.example.aveirobus.ui.viewmodels.UserPreferencesViewModel
+import com.example.aveirobus.ui.viewmodels.UserPreferencesViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // ATIVAR EDGE-TO-EDGE ANTES DE setContent
-        // A chamada simplificada enableEdgeToEdge() usa os padrões para transparência
-        // e ajusta automaticamente a cor dos ícones da barra de status/navegação.
+        // Ativar Edge-to-Edge com a abordagem básica
         enableEdgeToEdge()
 
         super.onCreate(savedInstanceState)
         setContent {
-            AveiroBusTheme {
+            // Obter a instância do aplicativo
+            val context = LocalContext.current
+            val app = context.applicationContext as AveiroApplication
+
+            // Inicializar o ViewModel de preferências do usuário
+            val userPreferencesViewModel: UserPreferencesViewModel = viewModel(
+                factory = UserPreferencesViewModelFactory(app.userPreferencesRepository)
+            )
+
+            // Observar as preferências do usuário
+            val userPreferences by userPreferencesViewModel.userPreferencesFlow.collectAsState(initial = null)
+
+            // Determinar o modo escuro
+            val isDarkMode = userPreferences?.darkModeEnabled ?: isSystemInDarkTheme()
+
+            // Configurar as barras do sistema baseado no tema usando WindowCompat
+            DisposableEffect(isDarkMode) {
+                val window = (context as ComponentActivity).window
+                window.statusBarColor = AndroidColor.TRANSPARENT
+                window.navigationBarColor = AndroidColor.TRANSPARENT
+
+                // Configurar a aparência das barras do sistema
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                insetsController.isAppearanceLightStatusBars = !isDarkMode
+                insetsController.isAppearanceLightNavigationBars = !isDarkMode
+
+                onDispose {}
+            }
+
+            AveiroBusTheme(darkTheme = isDarkMode) {
                 var isLoggedIn by remember { mutableStateOf(false) }
                 val navController = rememberNavController()
 
@@ -76,16 +104,13 @@ class MainActivity : ComponentActivity() {
 
                         if (currentRoute !in screensWithoutBottomBar) {
                             Surface(
-                                // Para um efeito de "vidro fosco" ou semi-transparente, pode usar:
-                                // color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
-                                // Para totalmente transparente para ver o mapa por baixo:
                                 color = Color.Transparent,
                             ) {
                                 BottomNavigationBar(navController = navController)
                             }
                         }
                     },
-                    containerColor = Color.Transparent // Container do Scaffold transparente
+                    containerColor = Color.Transparent
                 ) { innerPadding ->
                     Log.d("MainActivity", "Scaffold innerPadding: $innerPadding")
                     NavigationGraph(
@@ -106,7 +131,8 @@ class MainActivity : ComponentActivity() {
                                 launchSingleTop = true
                             }
                         },
-                        paddingValues = innerPadding
+                        paddingValues = innerPadding,
+                        viewModel = userPreferencesViewModel
                     )
                 }
             }

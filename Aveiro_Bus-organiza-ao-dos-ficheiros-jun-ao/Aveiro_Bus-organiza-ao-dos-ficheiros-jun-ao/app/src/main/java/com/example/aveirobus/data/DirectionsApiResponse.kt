@@ -1,4 +1,4 @@
-package com.example.aveirobus.data // Certifique-se de que este é o package correto
+package com.example.aveirobus.data
 
 import com.google.gson.annotations.SerializedName
 
@@ -12,13 +12,17 @@ data class DirectionsApiResponse(
 )
 
 data class Route(
-    val summary: String?,
-    val legs: List<Leg>?,
+    val bounds: Bounds? = null,
+    val copyrights: String? = null,
+    val legs: List<Leg>? = null,
     @SerializedName("overview_polyline")
-    val overviewPolyline: PolylineData?,
-    val copyrights: String?,
-    val warnings: List<String>?,
-    val bounds: Viewport?
+    val overviewPolyline: PolylineData? = null,
+    val summary: String? = null,
+    val warnings: List<String>? = null,
+    @SerializedName("waypoint_order")
+    val waypointOrder: List<Int>? = null,
+    val fare: Fare? = null,
+    var wheelchairAccessible: Boolean? = null
 )
 
 data class Leg(
@@ -87,7 +91,11 @@ data class LineDetails(
     val name: String?,
     @SerializedName("short_name")
     val shortName: String?,
-    val vehicle: VehicleDetails?
+    val vehicle: VehicleDetails?,
+    val agencies: List<Agency>? = null,
+    val color: String? = null,
+    @SerializedName("text_color")
+    val textColor: String? = null
 )
 
 data class VehicleDetails(
@@ -101,12 +109,24 @@ data class LocationPoint(
     val lng: Double?
 )
 
-data class Viewport(
+data class Bounds(
     val northeast: LocationPoint?,
     val southwest: LocationPoint?
 )
 
-// --- Novas Classes para Places Autocomplete API ---
+data class Fare(
+    val currency: String?,
+    val value: Double?,
+    val text: String?
+)
+
+data class Agency(
+    val name: String?,
+    val phone: String? = null,
+    val url: String? = null
+)
+
+// --- Classes para Places Autocomplete API ---
 
 data class PlacesAutocompleteResponse(
     val predictions: List<PlacePrediction>?,
@@ -125,7 +145,7 @@ data class PlacePrediction(
     val matchedSubstrings: List<MatchedSubstring>?,
     val terms: List<Term>?,
     @SerializedName("structured_formatting")
-    val structured_formatting: StructuredFormatting? // Nome corrigido para snake_case
+    val structured_formatting: StructuredFormatting? // Nome em snake_case conforme API
 )
 
 data class MatchedSubstring(
@@ -147,9 +167,5 @@ data class StructuredFormatting(
     val mainTextMatchedSubstrings: List<MatchedSubstring>?
 )
 
+// Para outras telas ou recursos
 data class Message(val text: String, val isUser: Boolean)
-
-// Adicione a data class Message aqui se for usada em múltiplos ecrãs
-// ou defina-a localmente nos ficheiros que a usam (AiChatScreen.kt).
-// data class Message(val text: String, val isUser: Boolean)
-
